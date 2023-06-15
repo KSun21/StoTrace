@@ -20,7 +20,7 @@ function get_fitting_domain(domain::Tuple, npoints::Int)
     x0 = domain[1]
     xf = domain[2]
     if x0 ≥ xf
-        throw(ArgumentError("Invalid domain. Please input an ordered tuple, not $domain."))
+        throw(ArgumentError("Invalid domain $domain. Please input an ordered tuple."))
     end
 
     Δx = (domain[2] - domain[1]) / (npoints-1) 
@@ -29,7 +29,6 @@ end
 
 chebyshev_fit(f::Function, domain::Tuple, npoints::Int; order::Int=5) = chebyshev_fit(f, get_fitting_domain(domain, npoints), order=order)
 chebyshev_fit(f::Function, xvals::Vector; order::Int=5) = chebyshev_fit(xvals, [f(x) for x in xvals], order=order)
-chebyshev_fit(yvals::Vector, domain::Tuple, npoints::Int; order::Int=5) = chebyshev_fit(get_fitting_domain(domain, npoints), yvals, order=order)
 
 function chebyshev_fit(xvals::Vector, yvals::Vector; order::Int=5)
 
@@ -102,4 +101,41 @@ function eval_fit(x, cb::ChebyshevPolynomial{T}) where T
     end
 
     return dot(Tn, cb.coef)
+end
+
+function mateval(f::Function, A::Matrix)
+    λ, U = eigen(A)
+
+    fvals = diagm(f.(λ))
+
+    return U * fvals * U'
+end
+
+function mateval(A::Matrix, cb::ChebyshevPolynomial)
+
+    # Get element-wise shifted A
+    sA = cb.a .* A .+ cb.b
+
+    T1 = zeros(size(sA))
+    T1[diagind(T1)] .= 1.0 
+
+    if cb.order == 1
+        return cb.coef[1] .* T1
+    end
+
+    T2 = similar(sA)
+    T2 .= sA
+    T3 = similar(sA)
+
+    out = cb.coef[1] .* T1 + cb.coef[2] .* T2
+
+    for n in 3:cb.order
+        T3 .= 2 .*sA*T2 - T1 
+        out += cb.coef[n] .* T3
+
+        T1 .= T2
+        T2 .= T3
+    end
+
+    return out
 end
