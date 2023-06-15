@@ -20,7 +20,6 @@
     c = chebyshev_fit(f, (-1,1), 4, order=4).coef
     @test (p4 ≈ 4c[4]) & (p3 ≈ 2c[3]) & (p2 ≈ c[2] - 3c[4]) & (p1 ≈ c[1] - c[3])
 
-
     # Numerical tests. Now we look at some numerical fit and set some RMS tolerance
     tols = [1e-1, 1e-3, 1e-5, 1e-7]
     ord = [5, 10, 15, 20]
@@ -33,4 +32,20 @@
         rms = sum(((fitted .- exact).^2) / length(xvals)) |> sqrt
         @test rms < t
     end
+
+    # Compare coefficients with numpy
+    x = collect(0:0.01:5)
+    y = exp.(x)
+    cb = chebyshev_fit(x, y, order=5)
+    @test cb.coef ≈ [40.04581473, 60.95298089, 31.03200979, 11.12392713,  3.27698755]
+
+    x = collect(1:0.01:5)
+    y = log.(x)
+    cb = chebyshev_fit(x, y, order=7)
+    @test cb.coef ≈ [0.96244263,  0.76380517, -0.14585858,  0.03701245, -0.01059841, 0.00307569, -0.00097732]
+
+    x = collect(10:1.0:100)
+    y = [(x^2 - 1/x)*sin(x) for x in x]
+    cb = chebyshev_fit(x, y, order=10)
+    @test cb.coef ≈ [-487.36553758,-966.80521864,-963.92179365,-947.14866806,-918.00999684,-883.81423028,-798.09985261,-734.84252216,-543.63284474,-457.03974943]
 end
