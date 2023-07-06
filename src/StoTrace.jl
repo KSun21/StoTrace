@@ -3,10 +3,6 @@ module StoTrace
 using LinearAlgebra
 
 
-function rademacher(n)
-    v = rand([-1.0, 1.0], n)
-    return v
-end
 
 function hutchinson(m, M)
 
@@ -26,6 +22,7 @@ function hutchinson(m, M)
     return out
 end
 
-include("chebyshev.jl")
+include("Chebyshev.jl")
+include("Hutchinson.jl")
 
 end # module
