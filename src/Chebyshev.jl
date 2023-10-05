@@ -1,4 +1,3 @@
-using Polynomials
 using LinearAlgebra
 
 export ChebyshevPolynomial
@@ -10,10 +9,21 @@ struct ChebyshevPolynomial{T}
     order::Int
 end
 
-chebyshev_fit(f::Function, npoints::Int; order::Int=5) = chebyshev_fit(f, collect(-1:2/(npoints-1):1), order=order)
-chebyshev_fit(f::Function, xvals::Vector; order::Int=5) = chebyshev_fit(xvals, [f(x) for x in xvals], order=order)
+function jackson_kernel(order::Int)
+    N = order+1
+    n = 0:(N-1)
+    return ( (N .- n .+ 1) .* cos.(π .* n / (N+1)) + sin.(π .* n / (N+1)) ./ tan(π / (N+1)) ) / (N+1)
+end
 
-function chebyshev_fit(x::Vector, y::Vector; order::Int=4)
+chebyshev_fit(f::Function, xvals::Vector; order::Int=5, jackson=false) = chebyshev_fit(xvals, [f(x) for x in xvals], order=order, jackson=jackson)
+
+function chebyshev_fit(f::Function, npoints::Int; order::Int=5, jackson=false) 
+    k = 0:(npoints-1)
+    xvals = collect(cos.(π * (k .+ 0.5) / npoints))
+    chebyshev_fit(f, xvals, order=order, jackson=jackson)
+end
+
+function chebyshev_fit(x::Vector, y::Vector; order::Int=4, jackson=false)
 
     if order < 1
         throw(ArgumentError("Chebyshev degree (order) has to be greater than 0."))
@@ -57,13 +67,14 @@ function chebyshev_fit(x::Vector, y::Vector; order::Int=4)
     # Solve the matrix equation Tc = y 
     c = T \ y
 
+    if jackson
+        c .= c .* jackson_kernel(order)
+    end
+
     return ChebyshevPolynomial(c, order)
 end
 
 function eval_fit(x, cb::ChebyshevPolynomial{T}) where T
-
-    # Get shifted value of x
-    xs = cb.a * x + cb.b
 
     Tn = zeros(T, cb.order+1)
 
@@ -72,10 +83,10 @@ function eval_fit(x, cb::ChebyshevPolynomial{T}) where T
         return cb.coef[1]
     end
 
-    Tn[2] = xs
+    Tn[2] = x
 
     for n in 3:(cb.order+1)
-        Tn[n] = 2xs*Tn[n-1] - Tn[n-2]
+        Tn[n] = 2x*Tn[n-1] - Tn[n-2]
     end
 
     return dot(Tn, cb.coef)
