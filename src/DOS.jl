@@ -14,21 +14,17 @@ function DOS(H, Emin, Emax, δE; cheb_order=300, cheb_npoints=600, k=30, ϵ=0.05
     # the DOS. It is related to the number of bins in a histogram.
 
     rE = (Emin+δE/2):δE:(Emax-δE/2)
-    println(rE)
     Ne = length(rE)
 
     b = 0.5*(Emax + Emin)
     a = (Emax - Emin)/(2-ϵ)
 
-    # Rescale the energy range to [-1,1]
-    Ek = (rE .- b) ./ a
-
     # Compute the σ value for the gaussian used to approximate the delta function
     # We want the Gaussian to mostly vanish for (x-x0) values greater than δE.
     # where x0 is the center of each gaussian (previous array we just created)
     # This can be achieved if σ = δE/3. Since 99.8% of the normal distribution lies 
-    # within ± 3σ = ± δE. Note tha we will take the scaled δE value.
-    σ = step(Ek)/3
+    # within ± 3σ = ± δE. 
+    σ = step(rE)/3
 
     # For each value of Ek in (∑ₖδ(E-Ek)) we will fit a chebyshev function...
     # Note that this will result in many fit evaluations which includes solving systems
@@ -41,10 +37,11 @@ function DOS(H, Emin, Emax, δE; cheb_order=300, cheb_npoints=600, k=30, ϵ=0.05
     y = zeros(Float64, cheb_npoints)
     κ = 0:(cheb_npoints-1)
     xvals = collect(cos.(π * (κ .+ 0.5) / cheb_npoints))
-    for x0 in Ek
+    T = zeros(length(xvals), cheb_order+1)
+    for x0 in rE 
         f(x) = gaussian(a*x+b, x0, σ)
         y .= f.(xvals)
-        cb = chebyshev_fit(xvals, y, order=cheb_order, jackson=jackson)
+        cb = chebyshev_fit!(T, xvals, y, order=cheb_order, jackson=jackson)
         push!(cbs, cb)
     end
 
@@ -53,8 +50,9 @@ function DOS(H, Emin, Emax, δE; cheb_order=300, cheb_npoints=600, k=30, ϵ=0.05
     s = zeros(Float64, Ne)
 
     l = size(sH, 1)
+    v = real ? zeros(l) : zeros(ComplexF64, l)
     for i = 1:k
-        v = real ? rademacher(l) : complex_unit(l)
+        rademacher!(v)
         inner!(s, sH, v, cbs)
     end
 

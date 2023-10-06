@@ -24,6 +24,11 @@ function chebyshev_fit(f::Function, npoints::Int; order::Int=5, jackson=false)
 end
 
 function chebyshev_fit(x::Vector, y::Vector; order::Int=4, jackson=false)
+    T = zeros(length(x), order+1)
+    chebyshev_fit!(T, x, y, order=order, jackson=jackson)
+end
+
+function chebyshev_fit!(T, x::Vector, y::Vector; order::Int=4, jackson=false)
 
     if order < 1
         throw(ArgumentError("Chebyshev degree (order) has to be greater than 0."))
@@ -45,8 +50,6 @@ function chebyshev_fit(x::Vector, y::Vector; order::Int=4, jackson=false)
     # +--------+-------+-------+
     # | T₀(x₂) | T₁(x₂)| T₂(x₂)|
     # +--------+-------+-------+
-
-    T = zeros(length(x), order+1)
 
     # Since T₀(x) = 1, the first column is simply
     T[:,1] .= 1
