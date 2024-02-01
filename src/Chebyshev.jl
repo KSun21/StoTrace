@@ -2,33 +2,33 @@ using LinearAlgebra
 
 export ChebyshevPolynomial
 export chebyshev_fit, eval_fit
-export mateval, inner
+export mateval, inner, non_hermitian_inner
+export polynomial_fit
 
 struct ChebyshevPolynomial{T}
     coef::Vector{T}
     order::Int
 end
 
-function jackson_kernel(order::Int)
-    N = order+1
-    n = 0:(N-1)
-    return ( (N .- n .+ 1) .* cos.(π .* n / (N+1)) + sin.(π .* n / (N+1)) ./ tan(π / (N+1)) ) / (N+1)
+struct Polynomial{T}
+    coef::Vector{T}
+    order::Int
 end
 
-chebyshev_fit(f::Function, xvals::Vector; order::Int=5, jackson=false) = chebyshev_fit(xvals, [f(x) for x in xvals], order=order, jackson=jackson)
+chebyshev_fit(f::Function, xvals::AbstractArray; order::Int=5) = chebyshev_fit(xvals, [f(x) for x in xvals], order=order)
 
-function chebyshev_fit(f::Function, npoints::Int; order::Int=5, jackson=false) 
+function chebyshev_fit(f::Function, npoints::Int; order::Int=5)
     k = 0:(npoints-1)
     xvals = collect(cos.(π * (k .+ 0.5) / npoints))
-    chebyshev_fit(f, xvals, order=order, jackson=jackson)
+    chebyshev_fit(f, xvals, order=order)
 end
 
-function chebyshev_fit(x::Vector, y::Vector; order::Int=4, jackson=false)
+function chebyshev_fit(x::AbstractArray, y::AbstractArray; order::Int=5)
     T = zeros(length(x), order+1)
-    chebyshev_fit!(T, x, y, order=order, jackson=jackson)
+    chebyshev_fit!(T, x, y, order=order)
 end
 
-function chebyshev_fit!(T, x::Vector, y::Vector; order::Int=4, jackson=false)
+function chebyshev_fit!(T, x::AbstractArray, y::AbstractArray; order::Int=5)
 
     if order < 1
         throw(ArgumentError("Chebyshev degree (order) has to be greater than 0."))
@@ -70,11 +70,45 @@ function chebyshev_fit!(T, x::Vector, y::Vector; order::Int=4, jackson=false)
     # Solve the matrix equation Tc = y 
     c = T \ y
 
-    if jackson
-        c .= c .* jackson_kernel(order)
+    return ChebyshevPolynomial(c, order)
+end
+
+polynomial_fit(f::Function, xvals::AbstractArray; order::Int=5) = polynomial_fit(xvals, [f(x) for x in xvals], order=order)
+
+polynomial_fit(f::Function, xmin, xmax, npoints::Int; order::Int=5) = polynomial_fit(f, range(start=xmin, stop=xmax, length=npoints), order=order)
+
+function polynomial_fit(x::AbstractArray, y::AbstractArray; order::Int=5)
+    P = zeros(length(x), order+1)
+    polynomial_fit!(P, x, y, order=order)
+end
+
+function polynomial_fit!(P, x::AbstractArray, y::AbstractArray; order::Int=5)
+
+    # Create a matrix P composed of polynomails of degree pn(x) along rows (i.e. each row is a degree [p₀(x), p₁(x), p₂(x)...])
+    # with different values of x along columns. For example, if we have three values of x (x₀, x₁, x₂) and a degree 3 
+    # polynomial the P arrays would look like
+    # +--------+-------+-------+
+    # | p₀(x₀) | p₁(x₀)| p₂(x₀)|
+    # +--------+-------+-------+
+    # | p₀(x₁) | p₁(x₁)| p₂(x₁)|
+    # +--------+-------+-------+
+    # | p₀(x₂) | p₁(x₂)| p₂(x₂)|
+    # +--------+-------+-------+
+
+    # Loop through polynomial orders (n = order+1)
+    for n in 1:(order+1)
+        # Loop through x values
+        for i in eachindex(x)
+
+            # Compute polynomial value pₙ(x) = xⁿ 
+            P[i,n] = x[i] ^ (n-1)
+        end
     end
 
-    return ChebyshevPolynomial(c, order)
+    # Solve the matrix equation Tc = y 
+    c = P \ y
+
+    return Polynomial(c, order)
 end
 
 function eval_fit(x, cb::ChebyshevPolynomial{T}) where T
@@ -93,6 +127,16 @@ function eval_fit(x, cb::ChebyshevPolynomial{T}) where T
     end
 
     return dot(Tn, cb.coef)
+end
+
+function eval_fit(x, pl::Polynomial{T}) where T
+
+    out = 0.0
+    for o in 0:pl.order
+        out += pl.coef[o+1]*x^o 
+    end
+
+    return out
 end
 
 # Auxiliary function to evalute mattrix functions
@@ -164,6 +208,71 @@ function inner(A, z0, cb::ChebyshevPolynomial)
 
         zⱼ₋₂ = zⱼ₋₁
         zⱼ₋₁ = zⱼ
+    end
+
+    return s
+end
+
+# No Hermiticity assumed
+function non_hermitian_inner(A, z0, pl::Polynomial)
+
+    # Alias to Polynomial coefficients (so we can use 0-indexing)
+    α(n) = pl.coef[n+1]
+
+    s = α(0)*(z0⋅z0)
+
+    zn = deepcopy(z0)
+    for i = 1:pl.order
+        zn = A * zn
+        s += α(i) * (z0 ⋅ zn) 
+    end
+
+    return s
+end
+
+# Hermiticity assumed
+function inner(A, z0, pl::Polynomial)
+    # Alias to Polynomial coefficients (so we can use 0-indexing)
+    α(n) = pl.coef[n+1]
+
+    zo = deepcopy(z0)
+    zn = A * zo
+
+    s = α(0)*(z0⋅z0)
+
+    if pl.order == 0
+        return s
+    end
+
+    s += α(1)*(zo ⋅ zn)
+    # Edge case, if the order is just 1
+    if pl.order == 1
+        return s
+    end
+
+    s += α(2)*(zn ⋅ zn)
+    # Edge case, if the order is just 1
+    if pl.order == 2
+        return s
+    end
+
+    # Loop through n values up to ⌊order/2
+    for n = 2:floor(Int, pl.order/2)
+
+        # Update zn such that zn = Aⁿ⋅z, where n is the loop variable
+        # The zo variable represents zₙ₋₁
+        zo = zn
+        zn = A * zo
+        s += α(2*n-1) * (zo ⋅ zn)
+        s += α(2*n) * (zn ⋅ zn) 
+    end
+
+    # When the order is odd, the loop above missed the final term n = order
+    # We add that manually here.
+    if isodd(pl.order)
+        zo .= zn
+        zn .= A * zo
+        s += α(pl.order) * (zo ⋅ zn)
     end
 
     return s

@@ -26,14 +26,15 @@ function rademacher!(v::Array{C}) where C <: Complex
     end
 end
 
-function hutchinson(m, M, cb; real=true)
+function hutchinson(m, M, pl; real=true, hermitian=true)
 
     out = 0.0
 
     l = size(M, 1)
+    v = real ? zeros(l) : zeros(ComplexF64, l)
     for i = 1:m
-        v = real ? rademacher(l) : complex_unit(l)
-        out += inner(M, v, cb)
+        rademacher!(v)
+        out += hermitian ? inner(M, v, pl) : non_hermitian_inner(M, v, pl)
     end
 
     return out / m
